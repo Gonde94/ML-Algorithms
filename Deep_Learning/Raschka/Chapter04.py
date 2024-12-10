@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader, Dataset
+import tiktoken
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257,  # num of words used by BPE tokenizer
@@ -194,3 +196,40 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
         )  # append sampled index to the running sequence, idx shape (batch, n_tokens+1)
 
     return idx
+
+
+# From chapter 2
+class GPTDatasetV1(Dataset):
+    def __init__(self, txt, tokenizer, max_length, stride):
+        self.input_ids = []
+        self.target_ids = []
+
+        token_ids = tokenizer.encode(txt, allowed_special={"<|endoftext|>"}) # tokenizes the entire text
+
+        for i in range(0, len(token_ids) - max_length, stride): # sliding window to chunk text into overlapping sequences of max_length
+            input_chunk = token_ids[i:i + max_length]
+            target_chunk = token_ids[i + 1: i + max_length + 1]
+            self.input_ids.append(torch.tensor(input_chunk))
+            self.target_ids.append(torch.tensor(target_chunk))
+
+    def __len__(self): # total number of rows in the dataset
+        return len(self.input_ids)
+    
+    def __getitem__(self, idx): # returns a single row from the dataset
+        return self.input_ids[idx], self.target_ids[idx]
+    
+
+def create_dataloader_v1(txt, batch_size=4, max_length=256,
+                         stride=128, shuffle=True, drop_last=True,
+                         num_workers=0):
+    tokenizer = tiktoken.get_encoding("gpt2")
+    dataset = GPTDatasetV1(txt, tokenizer, max_length, stride) # creates the dataset
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=drop_last, # if True, drops the last batch if it is smaller than specified batch_size
+        num_workers=num_workers # number of CPU processes to use for preprocessing
+    )
+
+    return dataloader
