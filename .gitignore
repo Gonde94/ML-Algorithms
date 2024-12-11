@@ -1,3 +1,4 @@
 # Ignore the following 
 
 .venv/
+*.cpython-312.pyc
